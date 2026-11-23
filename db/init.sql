@@ -52,6 +52,10 @@ AS $$
         WHERE principal.principal_name = session_user
           AND principal.tenant_id = row_tenant_id
           AND row_access_role = ANY (principal.allowed_roles)
+          AND row_tenant_id = current_setting('app.current_tenant_id', true)
+          AND row_access_role = ANY (
+              string_to_array(current_setting('app.allowed_roles', true), ',')
+          )
     );
 $$;
 ALTER FUNCTION efm_private.row_access_allowed(varchar, text) OWNER TO efm_owner;
@@ -74,6 +78,7 @@ CREATE TABLE parent_documents (
     access_role text NOT NULL DEFAULT 'all',
     status text NOT NULL DEFAULT 'active',
     registry_id bigint NOT NULL,
+    page_start integer NOT NULL DEFAULT 1 CHECK (page_start > 0),
     content text NOT NULL,
     UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, registry_id)

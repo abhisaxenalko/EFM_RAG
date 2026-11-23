@@ -116,7 +116,7 @@ def schema_rows(database_connections: dict[str, str]) -> Iterator[SchemaRows]:
                             tenant_id,
                             access_role,
                             registry[0],
-                            source_name,
+                            f"{source_name} ERR-409B indicates low flow",
                         ),
                     ).fetchone()
                     vector = "[" + ",".join("0" for _ in range(1024)) + "]"
@@ -131,7 +131,7 @@ def schema_rows(database_connections: dict[str, str]) -> Iterator[SchemaRows]:
                             tenant_id,
                             access_role,
                             parent[0],
-                            source_name,
+                            f"{source_name} ERR-409B indicates low flow",
                             vector,
                         ),
                     )
@@ -310,3 +310,28 @@ def test_efm_app_cannot_alter_tables_or_disable_rls(
                 conn.execute(
                     "ALTER TABLE documents_registry DISABLE ROW LEVEL SECURITY"
                 )
+
+
+@pytest.mark.isolation
+def test_hybrid_search_code_is_scoped_to_each_tenant(schema_rows: SchemaRows) -> None:
+    from app.retrieval.hybrid_search import search
+
+    vector = [1.0] + [0.0] * 1023
+    results_by_tenant = {}
+    for tenant, principal in (
+        ("tenant_alpha", schema_rows.roles["alpha"]),
+        ("tenant_beta", schema_rows.roles["beta"]),
+    ):
+        with connect_as_efm_app(schema_rows.connection_for(principal)) as conn:
+            results_by_tenant[tenant] = search(
+                conn,
+                tenant,
+                ["all", "engineer"],
+                "ERR-409B",
+                vector,
+            )
+
+    for tenant, results in results_by_tenant.items():
+        assert results
+        assert all(tenant in result.doc_name for result in results)
+        assert all("ERR-409B" in result.child_text for result in results)
