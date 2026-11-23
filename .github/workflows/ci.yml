@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      POSTGRES_DB: efm
+      POSTGRES_USER: efm_admin
+      POSTGRES_PASSWORD: ci-postgres-password
+      EFM_APP_PASSWORD: ci-app-password
+      REDIS_PASSWORD: ci-redis-password
+      DATABASE_URL: postgresql://efm_app:ci-app-password@127.0.0.1:5432/efm
+      REDIS_URL: redis://:ci-redis-password@127.0.0.1:6379/0
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Create local environment file
+        run: cp .env.example .env
+
+      - name: Start PostgreSQL and Redis
+        run: make up
+
+      - name: Install project dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Check API health
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run uvicorn app.api.main:app --host 127.0.0.1 --port 8000 >/tmp/efm-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          response="$(curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 --retry-max-time 30 http://127.0.0.1:8000/health)"
+          printf '%s' "$response" | python -c 'import json, sys; status=json.load(sys.stdin); assert status == {"status": "ok", "db": True, "redis": True}, status'
+
+      - name: Run tenant isolation tests
+        run: uv run pytest -m isolation

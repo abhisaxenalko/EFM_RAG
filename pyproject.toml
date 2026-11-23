@@ -16,6 +16,10 @@ dependencies = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["."]
+markers = [
+    "isolation: tenant isolation integration tests",
+    "eval: retrieval and answer quality evaluation tests",
+]
 
 [tool.ruff]
 target-version = "py311"

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +33,16 @@ app = FastAPI(lifespan=lifespan)
 
 async def _check_database() -> bool:
     settings = get_settings()
+    return await asyncio.to_thread(_probe_database, settings)
+
+
+def _probe_database(settings: Settings) -> bool:
     try:
-        conn = await psycopg.AsyncConnection.connect(
+        with psycopg.connect(
             settings.database_url,
             connect_timeout=settings.health_check_timeout,
-        )
-        await conn.close()
+        ):
+            pass
         return True
     except (OSError, psycopg.Error) as error:
         logger.warning("Database health check failed (%s)", type(error).__name__)
