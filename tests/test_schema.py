@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 import string
 from collections.abc import Callable, Iterator
@@ -99,11 +100,16 @@ def schema_rows(database_connections: dict[str, str]) -> Iterator[SchemaRows]:
                     registry = admin.execute(
                         """
                         INSERT INTO documents_registry
-                            (tenant_id, access_role, source_name)
-                        VALUES (%s, %s, %s)
+                            (tenant_id, access_role, source_name, sha256, version)
+                        VALUES (%s, %s, %s, %s, 1)
                         RETURNING id
                         """,
-                        (tenant_id, access_role, source_name),
+                        (
+                            tenant_id,
+                            access_role,
+                            source_name,
+                            hashlib.sha256(source_name.encode()).hexdigest(),
+                        ),
                     ).fetchone()
                     parent = admin.execute(
                         """
@@ -254,10 +260,14 @@ def test_insert_for_another_tenant_is_rejected(schema_rows: SchemaRows) -> None:
                 set_context(conn, "tenant_alpha", "all,engineer")
                 conn.execute(
                     """
-                    INSERT INTO documents_registry (tenant_id, source_name)
-                    VALUES ('tenant_beta', %s)
+                    INSERT INTO documents_registry
+                        (tenant_id, source_name, sha256, version)
+                    VALUES ('tenant_beta', %s, %s, 1)
                     """,
-                    (f"{schema_rows.marker}:rejected",),
+                    (
+                        f"{schema_rows.marker}:rejected",
+                        "0" * 64,
+                    ),
                 )
 
 

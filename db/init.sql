@@ -68,9 +68,16 @@ CREATE TABLE documents_registry (
     access_role text NOT NULL DEFAULT 'all',
     status text NOT NULL DEFAULT 'active',
     source_name text NOT NULL,
+    sha256 char(64) NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
+    version integer NOT NULL CHECK (version > 0),
     created_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (tenant_id, id)
+    UNIQUE (tenant_id, id),
+    CONSTRAINT documents_registry_tenant_source_version_key
+        UNIQUE (tenant_id, source_name, version)
 );
+CREATE UNIQUE INDEX documents_registry_active_hash_idx
+    ON documents_registry (tenant_id, sha256)
+    WHERE status = 'active';
 
 CREATE TABLE parent_documents (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -78,7 +85,9 @@ CREATE TABLE parent_documents (
     access_role text NOT NULL DEFAULT 'all',
     status text NOT NULL DEFAULT 'active',
     registry_id bigint NOT NULL,
+    heading_path text NOT NULL DEFAULT '',
     page_start integer NOT NULL DEFAULT 1 CHECK (page_start > 0),
+    is_table boolean NOT NULL DEFAULT false,
     content text NOT NULL,
     UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, registry_id)
