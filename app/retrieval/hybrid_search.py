@@ -86,6 +86,7 @@ class Candidate:
     child_text: str
     parent_text: str
     rrf_score: float
+    rerank_score: float | None = None
 
 
 def _vector_literal(embedding: Sequence[float]) -> str:

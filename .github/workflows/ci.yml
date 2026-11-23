@@ -22,6 +22,7 @@ jobs:
       DATABASE_URL: postgresql://efm_app:ci-app-password@127.0.0.1:5432/efm
       REDIS_URL: redis://:ci-redis-password@127.0.0.1:6379/0
       EMBEDDER: fake
+      RERANKER: fake
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,6 +56,9 @@ jobs:
 
       - name: Run embedding tests
         run: uv run pytest tests/test_embeddings.py
+
+      - name: Run reranker tests
+        run: uv run pytest tests/test_reranker.py
 
       - name: Run tenant isolation tests
         run: uv run pytest -m isolation
