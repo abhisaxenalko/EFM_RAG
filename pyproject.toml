@@ -1,0 +1,32 @@
+[project]
+name = "efm-corrective-rag"
+version = "0.1.0"
+description = "Multi-tenant Corrective RAG for facility management."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.165.0",
+    "httpx>=0.28.1",
+    "psycopg[binary,pool]>=3.3.9",
+    "pydantic-settings>=2.16.3",
+    "redis>=8.1.0",
+    "uvicorn>=0.54.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+    "ruff>=0.17.6",
+]
