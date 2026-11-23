@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Multi-tenant Corrective RAG for facility management."
 requires-python = ">=3.11"
 dependencies = [
+    "docling>=2.151.1",
     "fastapi>=0.165.0",
     "httpx>=0.28.1",
     "psycopg[binary,pool]>=3.3.9",
