@@ -46,6 +46,7 @@ def test_usage_json_round_trip_contains_only_usage_metadata() -> None:
         "output_tokens",
         "cost_usd",
         "latency_ms",
+        "event",
     }
 
 

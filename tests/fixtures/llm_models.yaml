@@ -1,0 +1,10 @@
+models:
+  fast:
+    model: test-fast
+    base_url: https://fast.example/v1
+    fallback: strong
+    input_cost_per_million: 2.0
+    output_cost_per_million: 4.0
+  strong:
+    model: test-strong
+    base_url: https://strong.example/v1

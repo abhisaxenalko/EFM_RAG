@@ -41,13 +41,14 @@ class ModelConfig:
 
 def load_models(path: str | Path | None = None) -> dict[str, ModelConfig]:
     """Load friendly model aliases from the repository's models.yaml."""
-    catalog = Path(path) if path else Path(__file__).resolve().parents[1] / "models.yaml"
+    catalog = (
+        Path(path) if path else Path(__file__).resolve().parents[1] / "models.yaml"
+    )
     try:
         raw = yaml.safe_load(catalog.read_text(encoding="utf-8"))
         entries = raw["models"]
         models = {
-            name: ModelConfig(name=name, **config)
-            for name, config in entries.items()
+            name: ModelConfig(name=name, **config) for name, config in entries.items()
         }
     except (OSError, KeyError, TypeError, yaml.YAMLError) as exc:
         raise ValueError(f"Could not load model catalog {catalog}: {exc}") from exc
@@ -89,9 +90,7 @@ class FakeLLM:
 
     def __init__(
         self,
-        structured_responses: Mapping[
-            type[BaseModel], Iterable[StructuredScriptItem]
-        ]
+        structured_responses: Mapping[type[BaseModel], Iterable[StructuredScriptItem]]
         | None = None,
         text_responses: Iterable[TextScriptItem] = (),
     ) -> None:
@@ -113,8 +112,7 @@ class FakeLLM:
         responses = self._structured.get(schema)
         if not responses:
             raise RuntimeError(
-                "FakeLLM script exhausted for structured schema "
-                f"{schema.__name__}"
+                f"FakeLLM script exhausted for structured schema {schema.__name__}"
             )
 
         item = responses.popleft()
@@ -165,8 +163,8 @@ class OpenAICompatClient:
         self.base_url_override = base_url
         self.http_client = http_client
         self.timeout = timeout
-        self._usage_entries: contextvars.ContextVar[list[Usage]] = contextvars.ContextVar(
-            f"llm_usage_{id(self)}", default=[]
+        self._usage_entries: contextvars.ContextVar[list[Usage]] = (
+            contextvars.ContextVar(f"llm_usage_{id(self)}", default=[])
         )
 
     @classmethod
@@ -201,7 +199,12 @@ class OpenAICompatClient:
         }
         if json_schema is not None:
             payload["response_format"] = {"type": "json_object"}
-        url = (self.base_url_override or config.base_url).rstrip("/")
+        base_url = (
+            self.base_url_override
+            if config.name == self.model_name and self.base_url_override
+            else config.base_url
+        )
+        url = base_url.rstrip("/")
         started = time.perf_counter()
         try:
             if self.http_client is None:
@@ -263,14 +266,24 @@ class OpenAICompatClient:
         user: str,
         schema: type[BaseModel] | None,
     ) -> tuple[str, Usage]:
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        if schema is not None:
+            system = (
+                f"{system}\nReturn only a JSON object matching this JSON Schema:\n"
+                f"{json.dumps(schema.model_json_schema())}"
+            )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
         last_error: Exception | None = None
         for attempt in range(2):
             try:
                 content, usage = await self._post(
                     config,
                     messages,
-                    json_schema=schema.model_json_schema() if schema is not None else None,
+                    json_schema=schema.model_json_schema()
+                    if schema is not None
+                    else None,
                 )
                 self._usage_entries.set([*self._usage_entries.get(), usage])
                 if schema is None:
@@ -286,14 +299,16 @@ class OpenAICompatClient:
                             {
                                 "role": "user",
                                 "content": (
-                                    "Repair the previous response. Return only JSON that "
-                                    f"matches this schema: {json.dumps(schema.model_json_schema())}. "
+                                    "Repair the response. Return JSON matching schema: "
+                                    f"{json.dumps(schema.model_json_schema())}. "
                                     f"Validation error: {exc}"
                                 ),
                             },
                         ]
                         continue
-                    raise EfmLLMError(config.model, f"invalid structured response: {exc}") from exc
+                    raise EfmLLMError(
+                        config.model, f"invalid structured response: {exc}"
+                    ) from exc
                 return parsed.model_dump_json(), usage
             except EfmLLMError as exc:
                 last_error = exc
@@ -338,9 +353,7 @@ class OpenAICompatClient:
         user: str,
         schema: type[BaseModel],
     ) -> tuple[BaseModel, Usage]:
-        content, usage = await self._complete(
-            system=system, user=user, schema=schema
-        )
+        content, usage = await self._complete(system=system, user=user, schema=schema)
         return schema.model_validate_json(content), usage
 
     async def complete_text(

@@ -184,8 +184,7 @@ async def guardrail_verify(state: CragState, deps: NodeDeps) -> dict[str, Any]:
     ]
     if invalid:
         missing = [
-            f"Citation not retrieved: {c.doc_name}, Page {c.page}"
-            for c in invalid
+            f"Citation not retrieved: {c.doc_name}, Page {c.page}" for c in invalid
         ]
         verdict = Verdict(supported=False, unsupported_claims=missing)
         return _update(state, "guardrail_verify", verified=verdict)
@@ -207,7 +206,7 @@ async def guardrail_verify(state: CragState, deps: NodeDeps) -> dict[str, Any]:
         state,
         "guardrail_verify",
         verified=verdict,
-            usage_log=_usage_update(state, deps.llm, usage),
+        usage_log=_usage_update(state, deps.llm, usage),
     )
 
 
