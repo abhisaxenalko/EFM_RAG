@@ -1,0 +1,17 @@
+models:
+  fast:
+    model: "replace-with-fast-model-id"
+    base_url: "https://api.groq.com/openai/v1"
+    fallback: strong
+    input_cost_per_million: 0.0
+    output_cost_per_million: 0.0
+  strong:
+    model: "replace-with-strong-model-id"
+    base_url: "https://api.groq.com/openai/v1"
+    input_cost_per_million: 0.0
+    output_cost_per_million: 0.0
+  local:
+    model: "replace-with-local-model-id"
+    base_url: "http://localhost:11434/v1"
+    input_cost_per_million: 0.0
+    output_cost_per_million: 0.0

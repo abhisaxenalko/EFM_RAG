@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     database_url: str
     redis_url: str
-    llm_base_url: str
+    llm_base_url: str | None = None
     llm_model: str
     llm_api_key: SecretStr
     env: str

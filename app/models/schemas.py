@@ -43,3 +43,4 @@ class Usage(BaseModel):
     output_tokens: int = Field(default=0, ge=0)
     cost_usd: float = Field(default=0.0, ge=0)
     latency_ms: float = Field(default=0.0, ge=0)
+    event: str = "call"

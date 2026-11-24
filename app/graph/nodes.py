@@ -53,8 +53,14 @@ def _context(docs: Sequence[Candidate]) -> str:
     return "<retrieved_context>\n" + "\n".join(chunks) + "\n</retrieved_context>"
 
 
-def _usage_update(state: CragState, usage: Usage) -> list[Usage]:
-    return [*state["usage_log"], usage]
+def _usage_entries(llm: LLMClient, usage: Usage) -> list[Usage]:
+    consume = getattr(llm, "consume_usage_log", None)
+    entries = consume() if consume is not None else []
+    return entries or [usage]
+
+
+def _usage_update(state: CragState, llm: LLMClient, usage: Usage) -> list[Usage]:
+    return [*state["usage_log"], *_usage_entries(llm, usage)]
 
 
 async def retrieve(state: CragState, deps: NodeDeps) -> dict[str, Any]:
@@ -89,7 +95,7 @@ async def _grade_in_band(
         except (ValidationError, TypeError, ValueError):
             usage_log.append(Usage())
             continue
-        usage_log.append(usage)
+        usage_log.extend(_usage_entries(deps.llm, usage))
         result = response.model_dump() if isinstance(response, BaseModel) else response
         try:
             return GradeOutput.model_validate(result), usage_log
@@ -141,7 +147,7 @@ async def rewrite_query(state: CragState, deps: NodeDeps) -> dict[str, Any]:
         "rewrite_query",
         rewritten_query=rewritten,
         retry_count=state["retry_count"] + 1,
-        usage_log=_usage_update(state, usage),
+        usage_log=_usage_update(state, deps.llm, usage),
     )
 
 
@@ -164,7 +170,7 @@ async def generate(state: CragState, deps: NodeDeps) -> dict[str, Any]:
         "generate",
         answer=answer,
         citations=answer.citations,
-        usage_log=_usage_update(state, usage),
+        usage_log=_usage_update(state, deps.llm, usage),
     )
 
 
@@ -201,7 +207,7 @@ async def guardrail_verify(state: CragState, deps: NodeDeps) -> dict[str, Any]:
         state,
         "guardrail_verify",
         verified=verdict,
-        usage_log=_usage_update(state, usage),
+            usage_log=_usage_update(state, deps.llm, usage),
     )
 
 
