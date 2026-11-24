@@ -10,6 +10,16 @@ from app.ingestion.parser import Section
 _TOKENIZER_NAME = "BAAI/bge-m3"
 _PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n+")
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+")
+_INSTRUCTION_LIKE_TEXT = re.compile(
+    r"\bignore\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above)\s+instructions?\b"
+    r"|\breveal\b|\bsystem\s+prompt\b",
+    re.IGNORECASE,
+)
+
+
+def scan_chunk(text: str) -> bool:
+    """Return True when a chunk contains instruction-like text."""
+    return _INSTRUCTION_LIKE_TEXT.search(text) is not None
 
 
 def _is_table_separator(line: str) -> bool:

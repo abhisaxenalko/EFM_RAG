@@ -60,7 +60,8 @@ SELECT chunks.id,
        parent.page_start,
        chunks.content,
        parent.content,
-       fused.rrf_score
+       fused.rrf_score,
+       chunks.suspicious
 FROM fused
 JOIN document_chunks AS chunks ON chunks.id = fused.id
 JOIN parent_documents AS parent ON parent.id = chunks.parent_document_id
@@ -86,6 +87,7 @@ class Candidate:
     child_text: str
     parent_text: str
     rrf_score: float
+    suspicious: bool | None = False
     rerank_score: float | None = None
 
 
@@ -124,8 +126,13 @@ def search(
         raise ValueError("K_EACH and K_FUSED must be positive and RRF_K non-negative")
     vector = _vector_literal(query_embedding)
     params = (
-        _lexical_text(query_text), vector, vector, settings.k_each,
-        settings.k_each, settings.rrf_k, settings.k_fused,
+        _lexical_text(query_text),
+        vector,
+        vector,
+        settings.k_each,
+        settings.k_each,
+        settings.rrf_k,
+        settings.k_fused,
     )
     started = perf_counter()
     count = 0

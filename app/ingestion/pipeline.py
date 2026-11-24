@@ -11,7 +11,7 @@ import redis
 
 from app.cache.semantic_cache import SemanticCache
 from app.config import get_settings
-from app.ingestion.chunker import build_children, build_parents
+from app.ingestion.chunker import build_children, build_parents, scan_chunk
 from app.ingestion.parser import parse_document
 from app.models.embeddings import embed
 
@@ -71,6 +71,7 @@ def ingest(
         build_children(parent, tenant_id, doc_name) for parent in parents
     ]
     flat_children = [child for group in children_by_parent for child in group]
+    suspicious_children = [scan_chunk(child) for child in flat_children]
     vectors = embed(flat_children)
     if len(vectors) != len(flat_children):
         raise ValueError("The embedder returned a different number of vectors")
@@ -176,8 +177,8 @@ def ingest(
                         """
                         INSERT INTO document_chunks
                             (tenant_id, access_role, status, parent_document_id,
-                             chunk_index, content, embedding)
-                        VALUES (%s, %s, 'staging', %s, %s, %s, %s::vector)
+                             chunk_index, content, embedding, suspicious)
+                        VALUES (%s, %s, 'staging', %s, %s, %s, %s::vector, %s)
                         """,
                         (
                             tenant_id,
@@ -186,6 +187,7 @@ def ingest(
                             child_index,
                             child_text,
                             vector_literals[child_offset],
+                            suspicious_children[child_offset],
                         ),
                     )
                     child_offset += 1
@@ -229,8 +231,7 @@ def ingest(
                 (registry_id,),
             )
             conn.execute(
-                "UPDATE parent_documents SET status = 'active' "
-                "WHERE registry_id = %s",
+                "UPDATE parent_documents SET status = 'active' WHERE registry_id = %s",
                 (registry_id,),
             )
             conn.execute(

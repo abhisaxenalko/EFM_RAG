@@ -33,6 +33,20 @@ class SchemaTestSettings(BaseSettings):
     postgres_db: str
 
 
+def test_suspicious_column_is_nullable(database_connections: dict[str, str]) -> None:
+    with psycopg.connect(database_connections["admin"]) as conn:
+        column = conn.execute(
+            """
+            SELECT is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'document_chunks'
+              AND column_name = 'suspicious'
+            """
+        ).fetchone()
+    assert column == ("YES", None)
+
+
 @pytest.fixture(scope="session")
 def database_connections() -> dict[str, str]:
     settings = SchemaTestSettings()

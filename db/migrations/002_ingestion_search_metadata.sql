@@ -10,6 +10,24 @@ ALTER TABLE parent_documents
     ADD COLUMN IF NOT EXISTS page_start integer NOT NULL DEFAULT 1,
     ADD COLUMN IF NOT EXISTS is_table boolean NOT NULL DEFAULT false;
 
+ALTER TABLE document_chunks
+    ADD COLUMN IF NOT EXISTS suspicious boolean;
+ALTER TABLE document_chunks
+    ALTER COLUMN suspicious DROP NOT NULL,
+    ALTER COLUMN suspicious DROP DEFAULT;
+
+UPDATE document_chunks
+SET suspicious = true
+WHERE suspicious IS DISTINCT FROM true
+  AND content ~* (
+      'ignore[[:space:]]+(all[[:space:]]+)?(the[[:space:]]+)?'
+      '(previous|prior|above)[[:space:]]+instructions?|reveal|system[[:space:]]+prompt'
+  );
+
+UPDATE document_chunks
+SET suspicious = false
+WHERE suspicious IS NULL;
+
 DO $$
 BEGIN
     IF NOT EXISTS (

@@ -102,11 +102,18 @@ CREATE TABLE document_chunks (
     parent_document_id bigint NOT NULL,
     chunk_index integer NOT NULL,
     content text NOT NULL,
+    suspicious boolean,
     tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple', content)) STORED,
     embedding vector(1024) NOT NULL,
     FOREIGN KEY (tenant_id, parent_document_id)
         REFERENCES parent_documents (tenant_id, id) ON DELETE CASCADE
 );
+
+ALTER TABLE document_chunks
+    ADD COLUMN IF NOT EXISTS suspicious boolean;
+ALTER TABLE document_chunks
+    ALTER COLUMN suspicious DROP NOT NULL,
+    ALTER COLUMN suspicious DROP DEFAULT;
 
 CREATE INDEX documents_registry_tenant_status_idx
     ON documents_registry (tenant_id, status);
