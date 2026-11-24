@@ -34,6 +34,18 @@ def _client(handler):
     return client, http_client
 
 
+def test_model_alias_client_uses_catalog_model_and_reuses_client():
+    client = OpenAICompatClient("fast", "test-key", catalog_path=CATALOG)
+
+    fast = client.for_alias("fast")
+    strong = client.for_alias("strong")
+
+    assert fast is client
+    assert strong.model_name == "strong"
+    assert strong.models[strong.model_name].model == "test-strong"
+    assert client.for_alias("strong") is strong
+
+
 @pytest.mark.asyncio
 async def test_openai_compat_success_validates_and_records_usage():
     calls = []

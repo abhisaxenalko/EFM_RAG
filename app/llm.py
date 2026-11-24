@@ -161,8 +161,10 @@ class OpenAICompatClient:
         self.model_name = model_name
         self.api_key = api_key
         self.base_url_override = base_url
+        self.catalog_path = Path(catalog_path) if catalog_path else None
         self.http_client = http_client
         self.timeout = timeout
+        self._aliases: dict[str, OpenAICompatClient] = {model_name: self}
         self._usage_entries: contextvars.ContextVar[list[Usage]] = (
             contextvars.ContextVar(f"llm_usage_{id(self)}", default=[])
         )
@@ -185,6 +187,21 @@ class OpenAICompatClient:
         entries = self._usage_entries.get()
         self._usage_entries.set([])
         return entries
+
+    def for_alias(self, model_name: str) -> OpenAICompatClient:
+        """Return a client bound to a catalog alias, reusing it per process."""
+        if model_name not in self.models:
+            raise ValueError(f"Unknown LLM model alias: {model_name!r}")
+        if model_name not in self._aliases:
+            self._aliases[model_name] = OpenAICompatClient(
+                model_name,
+                self.api_key,
+                base_url=self.base_url_override,
+                catalog_path=self.catalog_path,
+                http_client=self.http_client,
+                timeout=self.timeout,
+            )
+        return self._aliases[model_name]
 
     async def _post(
         self,

@@ -1,15 +1,15 @@
 models:
   fast:
-    model: "replace-with-fast-model-id"
+    model: "openai/gpt-oss-20b"
     base_url: "https://api.groq.com/openai/v1"
     fallback: strong
-    input_cost_per_million: 0.0
-    output_cost_per_million: 0.0
+    input_cost_per_million: 0.075
+    output_cost_per_million: 0.30
   strong:
-    model: "replace-with-strong-model-id"
+    model: "openai/gpt-oss-120b"
     base_url: "https://api.groq.com/openai/v1"
-    input_cost_per_million: 0.0
-    output_cost_per_million: 0.0
+    input_cost_per_million: 0.15
+    output_cost_per_million: 0.60
   local:
     model: "replace-with-local-model-id"
     base_url: "http://localhost:11434/v1"

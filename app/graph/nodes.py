@@ -59,6 +59,11 @@ def _usage_entries(llm: LLMClient, usage: Usage) -> list[Usage]:
     return entries or [usage]
 
 
+def _llm_for(deps: NodeDeps, alias: str) -> LLMClient:
+    for_alias = getattr(deps.llm, "for_alias", None)
+    return for_alias(alias) if for_alias is not None else deps.llm
+
+
 def _usage_update(state: CragState, llm: LLMClient, usage: Usage) -> list[Usage]:
     return [*state["usage_log"], *_usage_entries(llm, usage)]
 
@@ -75,6 +80,7 @@ async def _grade_in_band(
     deps: NodeDeps,
     score: float,
 ) -> tuple[GradeOutput, list[Usage]]:
+    llm = _llm_for(deps, "fast")
     system = _prompt("grader")
     user = json.dumps(
         {
@@ -89,13 +95,13 @@ async def _grade_in_band(
     for _ in range(2):
         usage: Usage | None = None
         try:
-            response, usage = await deps.llm.complete_structured(
+            response, usage = await llm.complete_structured(
                 system=system, user=user, schema=GradeOutput
             )
         except (ValidationError, TypeError, ValueError):
             usage_log.append(Usage())
             continue
-        usage_log.extend(_usage_entries(deps.llm, usage))
+        usage_log.extend(_usage_entries(llm, usage))
         result = response.model_dump() if isinstance(response, BaseModel) else response
         try:
             return GradeOutput.model_validate(result), usage_log
@@ -127,6 +133,7 @@ async def grade_documents(state: CragState, deps: NodeDeps) -> dict[str, Any]:
 
 
 async def rewrite_query(state: CragState, deps: NodeDeps) -> dict[str, Any]:
+    llm = _llm_for(deps, "fast")
     user = json.dumps(
         {
             "query": state["query"],
@@ -134,7 +141,7 @@ async def rewrite_query(state: CragState, deps: NodeDeps) -> dict[str, Any]:
             "retry_count": state["retry_count"],
         }
     )
-    text, usage = await deps.llm.complete_text(system=_prompt("rewriter"), user=user)
+    text, usage = await llm.complete_text(system=_prompt("rewriter"), user=user)
     try:
         payload = json.loads(text)
         rewritten = payload["rewritten_query"]
@@ -147,11 +154,12 @@ async def rewrite_query(state: CragState, deps: NodeDeps) -> dict[str, Any]:
         "rewrite_query",
         rewritten_query=rewritten,
         retry_count=state["retry_count"] + 1,
-        usage_log=_usage_update(state, deps.llm, usage),
+        usage_log=_usage_update(state, llm, usage),
     )
 
 
 async def generate(state: CragState, deps: NodeDeps) -> dict[str, Any]:
+    llm = _llm_for(deps, "strong")
     user = json.dumps(
         {
             "query": state["rewritten_query"] or state["query"],
@@ -159,7 +167,7 @@ async def generate(state: CragState, deps: NodeDeps) -> dict[str, Any]:
             "retrieved_context": _context(state["docs"]),
         }
     )
-    response, usage = await deps.llm.complete_structured(
+    response, usage = await llm.complete_structured(
         system=_prompt("generator"), user=user, schema=Answer
     )
     answer = Answer.model_validate(
@@ -170,7 +178,7 @@ async def generate(state: CragState, deps: NodeDeps) -> dict[str, Any]:
         "generate",
         answer=answer,
         citations=answer.citations,
-        usage_log=_usage_update(state, deps.llm, usage),
+        usage_log=_usage_update(state, llm, usage),
     )
 
 
@@ -188,7 +196,8 @@ async def guardrail_verify(state: CragState, deps: NodeDeps) -> dict[str, Any]:
         ]
         verdict = Verdict(supported=False, unsupported_claims=missing)
         return _update(state, "guardrail_verify", verified=verdict)
-    verdict, usage = await deps.llm.complete_structured(
+    llm = _llm_for(deps, "strong")
+    verdict, usage = await llm.complete_structured(
         system=_prompt("verifier"),
         user=json.dumps(
             {
@@ -206,7 +215,7 @@ async def guardrail_verify(state: CragState, deps: NodeDeps) -> dict[str, Any]:
         state,
         "guardrail_verify",
         verified=verdict,
-        usage_log=_usage_update(state, deps.llm, usage),
+        usage_log=_usage_update(state, llm, usage),
     )
 
 
