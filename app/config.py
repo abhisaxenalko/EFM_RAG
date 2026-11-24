@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     k_fused: int
     k_final: int
     rrf_k: int
+    grade_low: float = 0.35
+    grade_high: float = 0.75
     cache_sim: float
     max_rewrites: int
     max_regenerations: int

@@ -23,6 +23,9 @@ Return exactly one JSON object with one string field:
 - Add the missing aspect as a search term or focused subquestion when provided.
 - Preserve part and fault codes exactly, including punctuation such as the
   hyphen in `ERR-409B`.
+- Use `missing_aspect` to add relevant acronym expansions, synonyms, and part
+  codes when those terms are supplied or their expansion is explicit in the
+  input. Never guess an acronym expansion or invent a part-code meaning.
 - Do not answer the question, invent facts, add explanations, or return multiple
   alternatives.
 - Output valid JSON only; do not add Markdown or commentary.
