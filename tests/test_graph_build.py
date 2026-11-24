@@ -71,6 +71,7 @@ async def test_supported_answer_ends_after_verification() -> None:
         "grade_documents",
         "generate",
         "guardrail_verify",
+        "cache_store",
     ]
     assert len(result["usage_log"]) == 2
 

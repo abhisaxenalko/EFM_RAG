@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from app.cache.semantic_cache import SemanticCache
 from app.config import Settings
 from app.graph.state import CragState
 from app.llm import LLMClient
@@ -24,6 +25,8 @@ class NodeDeps:
     searcher: Callable[..., Any]
     reranker: Callable[..., Any]
     settings: Settings
+    cache: SemanticCache | None = None
+    embedder: Callable[[list[str]], list[list[float]]] | None = None
 
 
 def _update(state: CragState, node: str, **updates: Any) -> dict[str, Any]:
@@ -211,3 +214,25 @@ async def abstain(state: CragState, deps: NodeDeps) -> dict[str, Any]:
     closest = ", ".join(names) if names else "none"
     answer = Answer(text=f"{message}\nClosest documents: {closest}.")
     return _update(state, "abstain", answer=answer, citations=[], abstained=True)
+
+
+async def cache_store(state: CragState, deps: NodeDeps) -> dict[str, Any]:
+    cache = getattr(deps, "cache", None)
+    embedder = getattr(deps, "embedder", None)
+    verdict, answer = state["verified"], state["answer"]
+    if cache is None or embedder is None or verdict is None or not verdict.supported:
+        return _update(state, "cache_store")
+    if state["abstained"] or answer is None:
+        return _update(state, "cache_store")
+    query = state["rewritten_query"] or state["query"]
+    vectors = await _invoke(embedder, [query])
+    if vectors:
+        await _invoke(
+            cache.store,
+            state["tenant_id"],
+            state["roles"],
+            query,
+            vectors[0],
+            answer,
+        )
+    return _update(state, "cache_store")

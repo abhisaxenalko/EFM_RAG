@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import psycopg
+import redis
 
+from app.cache.semantic_cache import SemanticCache
 from app.config import get_settings
 from app.ingestion.chunker import build_children, build_parents
 from app.ingestion.parser import parse_document
@@ -240,6 +242,13 @@ def ingest(
                 """,
                 (registry_id,),
             )
+
+    with redis.Redis.from_url(settings.redis_url) as redis_client:
+        SemanticCache(
+            redis_client,
+            cache_sim=settings.cache_sim,
+            ttl_seconds=settings.cache_ttl_seconds,
+        ).bump_corpus_version(tenant_id)
 
     return IngestResult(
         doc_id=registry_id,

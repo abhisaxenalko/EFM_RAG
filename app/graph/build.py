@@ -7,7 +7,9 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes import (
     NodeDeps,
+    _invoke,
     abstain,
+    cache_store,
     generate,
     grade_documents,
     guardrail_verify,
@@ -15,14 +17,35 @@ from app.graph.nodes import (
     rewrite_query,
 )
 from app.graph.state import CragState
+from app.models.schemas import Answer, Verdict
 
 RECURSION_LIMIT = 15
 
 
 async def cache_check(state: CragState, deps: NodeDeps) -> dict[str, Any]:
-    """Temporary cache node; caching is not wired yet."""
-    del deps
-    return {"cache_hit": False, "trace": [*state["trace"], "cache_check"]}
+    """Return a cached verified answer or mark the request as a cache miss."""
+    cache, embedder = getattr(deps, "cache", None), getattr(deps, "embedder", None)
+    if cache is None or embedder is None:
+        return {"cache_hit": False, "trace": [*state["trace"], "cache_check"]}
+    query = state["rewritten_query"] or state["query"]
+    vectors = await _invoke(embedder, [query])
+    answer = await _invoke(
+        cache.lookup, state["tenant_id"], state["roles"], vectors[0]
+    ) if vectors else None
+    update: dict[str, Any] = {"cache_hit": answer is not None}
+    if answer is not None:
+        parsed = answer if isinstance(answer, Answer) else Answer.model_validate(answer)
+        update.update(
+            answer=parsed,
+            citations=parsed.citations,
+            verified=Verdict(supported=True),
+            abstained=False,
+        )
+    return {**update, "trace": [*state["trace"], "cache_check"]}
+
+
+def _cache_route(state: CragState) -> Literal["hit", "miss"]:
+    return "hit" if state["cache_hit"] else "miss"
 
 
 async def prepare_regeneration(
@@ -73,10 +96,15 @@ def build_graph(deps: NodeDeps) -> Any:
     builder.add_node("rewrite_query", partial(rewrite_query, deps=deps))
     builder.add_node("generate", partial(generate, deps=deps))
     builder.add_node("guardrail_verify", partial(guardrail_verify, deps=deps))
+    builder.add_node("cache_store", partial(cache_store, deps=deps))
     builder.add_node("prepare_regeneration", partial(prepare_regeneration, deps=deps))
     builder.add_node("abstain", partial(abstain, deps=deps))
     builder.add_edge(START, "cache_check")
-    builder.add_edge("cache_check", "retrieve")
+    builder.add_conditional_edges(
+        "cache_check",
+        _cache_route,
+        {"hit": END, "miss": "retrieve"},
+    )
     builder.add_edge("retrieve", "grade_documents")
     builder.add_conditional_edges(
         "grade_documents",
@@ -93,11 +121,12 @@ def build_graph(deps: NodeDeps) -> Any:
         "guardrail_verify",
         lambda state: _verification_route(state, deps),
         {
-            "end": END,
+            "end": "cache_store",
             "prepare_regeneration": "prepare_regeneration",
             "abstain": "abstain",
         },
     )
+    builder.add_edge("cache_store", END)
     builder.add_edge("prepare_regeneration", "generate")
     builder.add_edge("abstain", END)
     return builder.compile().with_config({"recursion_limit": RECURSION_LIMIT})

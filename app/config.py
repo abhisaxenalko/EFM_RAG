@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     grade_low: float = 0.35
     grade_high: float = 0.75
     cache_sim: float
+    cache_ttl_seconds: int = 3600
     max_rewrites: int
     max_regenerations: int
     health_check_timeout: int
