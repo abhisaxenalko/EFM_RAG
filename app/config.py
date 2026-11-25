@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     llm_model: str
     llm_api_key: SecretStr
     env: str
+    jwt_issuer: str | None = None
+    jwt_audience: str | None = None
+    jwt_public_key: SecretStr | None = None
 
 
 @lru_cache
