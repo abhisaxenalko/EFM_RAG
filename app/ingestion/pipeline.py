@@ -47,6 +47,8 @@ def ingest(
     access_role: str,
     path: str | Path,
     doc_name: str,
+    *,
+    bump_cache_version: bool = True,
 ) -> IngestResult:
     """Parse, chunk, embed, and atomically activate a tenant document version.
 
@@ -244,12 +246,13 @@ def ingest(
                 (registry_id,),
             )
 
-    with redis.Redis.from_url(settings.redis_url) as redis_client:
-        SemanticCache(
-            redis_client,
-            cache_sim=settings.cache_sim,
-            ttl_seconds=settings.cache_ttl_seconds,
-        ).bump_corpus_version(tenant_id)
+    if bump_cache_version:
+        with redis.Redis.from_url(settings.redis_url) as redis_client:
+            SemanticCache(
+                redis_client,
+                cache_sim=settings.cache_sim,
+                ttl_seconds=settings.cache_ttl_seconds,
+            ).bump_corpus_version(tenant_id)
 
     return IngestResult(
         doc_id=registry_id,

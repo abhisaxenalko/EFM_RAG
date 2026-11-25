@@ -11,6 +11,8 @@ from pydantic import BaseModel
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
+from app.api.chat import router as chat_router
+from app.api.ingest import router as ingest_router
 from app.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,8 @@ class HealthResponse(BaseModel):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(ingest_router)
+app.include_router(chat_router)
 
 
 async def _check_database() -> bool:

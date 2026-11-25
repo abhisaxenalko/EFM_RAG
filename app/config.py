@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
     jwt_public_key: SecretStr | None = None
+    max_upload_mb: int = 20
+    chat_timeout_seconds: int = 90
 
 
 @lru_cache
