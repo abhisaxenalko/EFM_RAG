@@ -3,17 +3,21 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import secrets
 import time
 import uuid
 from collections.abc import AsyncIterator, Iterator
-from contextlib import aclosing
+from contextlib import aclosing, contextmanager
 from typing import Any
 
 import psycopg
 import redis
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.api.events import (
     CitationsEvent,
@@ -57,7 +61,76 @@ class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=8000)
 
 
-def get_chat_deps() -> Iterator[NodeDeps]:
+class _DevDatabaseSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    postgres_user: str
+    postgres_password: SecretStr
+    postgres_db: str
+
+
+@contextmanager
+def _tenant_database_connection(settings, identity: Identity):
+    if settings.env.casefold() != "dev":
+        with psycopg.connect(settings.database_url) as connection:
+            yield connection
+        return
+
+    admin_settings = _DevDatabaseSettings()
+    params = conninfo_to_dict(settings.database_url)
+    params.update(
+        user=admin_settings.postgres_user,
+        password=admin_settings.postgres_password.get_secret_value(),
+        dbname=admin_settings.postgres_db,
+        connect_timeout=10,
+    )
+    admin = psycopg.connect(make_conninfo(**params), autocommit=True)
+    role_name = f"efm_chat_{secrets.token_hex(8)}"
+    password = secrets.token_urlsafe(32)
+    connection = None
+    try:
+        admin.execute(
+            sql.SQL("CREATE ROLE {} LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD {}").format(
+                sql.Identifier(role_name), sql.Literal(password)
+            )
+        )
+        admin.execute(sql.SQL("GRANT efm_app TO {}").format(sql.Identifier(role_name)))
+        admin.execute("SET ROLE efm_owner")
+        admin.execute(
+            "INSERT INTO efm_private.tenant_principals "
+            "(principal_name, tenant_id, allowed_roles) VALUES (%s, %s, %s)",
+            (role_name, identity.tenant_id, identity.roles),
+        )
+        admin.execute("RESET ROLE")
+        tenant_params = conninfo_to_dict(settings.database_url)
+        tenant_params.update(
+            user=role_name,
+            password=password,
+            connect_timeout=10,
+        )
+        connection = psycopg.connect(make_conninfo(**tenant_params))
+        connection.execute("SET ROLE efm_app")
+        connection.commit()
+        yield connection
+    finally:
+        if connection is not None:
+            connection.close()
+        admin.execute("SET ROLE efm_owner")
+        admin.execute(
+            "DELETE FROM efm_private.tenant_principals WHERE principal_name = %s",
+            (role_name,),
+        )
+        admin.execute("RESET ROLE")
+        admin.execute(
+            sql.SQL("REVOKE efm_app FROM {}").format(sql.Identifier(role_name))
+        )
+        admin.execute(
+            sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role_name))
+        )
+        admin.close()
+
+
+def get_chat_deps(identity: Identity = Depends(get_identity)) -> Iterator[NodeDeps]:
     settings = get_settings()
     llm = OpenAICompatClient(
         "fast",
@@ -66,10 +139,20 @@ def get_chat_deps() -> Iterator[NodeDeps]:
     )
     redis_client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
 
+    if not identity.roles:
+        raise HTTPException(
+            status_code=401, detail="Invalid authentication credentials"
+        )
+    db_context = _tenant_database_connection(settings, identity)
+    connection = db_context.__enter__()
+
     def searcher(tenant_id: str, roles: list[str], query: str):
+        if tenant_id != identity.tenant_id or not set(roles) <= set(identity.roles):
+            raise PermissionError(
+                "Search identity does not match the authenticated tenant"
+            )
         query_vector = embed([query])[0]
-        with psycopg.connect(settings.database_url) as connection:
-            return search(connection, tenant_id, roles, query, query_vector)
+        return search(connection, tenant_id, roles, query, query_vector)
 
     deps = NodeDeps(
         llm=llm,
@@ -87,6 +170,7 @@ def get_chat_deps() -> Iterator[NodeDeps]:
         yield deps
     finally:
         redis_client.close()
+        db_context.__exit__(None, None, None)
 
 
 def _value(output: Any, key: str, default: Any = None) -> Any:

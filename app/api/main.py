@@ -2,11 +2,13 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal
 
 import psycopg
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
@@ -33,6 +35,14 @@ class HealthResponse(BaseModel):
 app = FastAPI(lifespan=lifespan)
 app.include_router(ingest_router)
 app.include_router(chat_router)
+
+console_dist = Path(__file__).resolve().parents[2] / "web" / "console" / "dist"
+if console_dist.is_dir():
+    app.mount(
+        "/console",
+        StaticFiles(directory=console_dist, html=True),
+        name="console",
+    )
 
 
 async def _check_database() -> bool:
